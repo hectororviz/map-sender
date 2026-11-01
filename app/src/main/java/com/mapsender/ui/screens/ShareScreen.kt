@@ -31,6 +31,8 @@ import com.mapsender.ui.ShareViewModel
 fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, onOpenSettings: () -> Unit) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    LaunchedEffect(activity) { vm.attachActivity(activity) }
     fun openInBrowser(url: String) {
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -100,6 +102,14 @@ fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, on
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Buscando coordenadas de «${s.name}»…")
                     Text("Último recurso: geocodificación del nombre.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = onClose) { Text("Cancelar") }
+                }
+            is ShareUiState.OpeningPlace ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Abriendo «${s.name}»…")
+                    Text(s.url, style = MaterialTheme.typography.bodySmall)
+                    Text("Como el navegador: se espera a que la página muestre las coordenadas.",
+                        style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = onClose) { Text("Cancelar") }
                 }
             is ShareUiState.ManualEntry -> ManualEntryForm(

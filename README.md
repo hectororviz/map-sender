@@ -31,7 +31,7 @@ Ver `docs/CONFIG_EXAMPLE.md` (ejemplo sin credenciales).
 
 1. Ajustes: introduce URL y token, pulsa Probar conexión.
 2. En Google Maps: Compartir → Map Sender.
-3. Revisa destino → Enviar.
+3. Se envía automáticamente (revisión previa opcional en Ajustes → Confirmar envío).
 4. En el receptor: toca la notificación → se abre Waze.
 
 Instalación y API: ver `docs/` y `README` completo abajo.

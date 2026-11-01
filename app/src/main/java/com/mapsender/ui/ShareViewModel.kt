@@ -1,12 +1,13 @@
 package com.mapsender.ui
 
+import android.app.Activity
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mapsender.MapSenderApp
+import com.mapsender.data.AppSettings
 import com.mapsender.data.GotifyResult
 import com.mapsender.domain.GeoDestination
-import com.mapsender.data.AppSettings
 import com.mapsender.domain.GotifyPayloadBuilder
 import com.mapsender.domain.MapsLinkParser
 import com.mapsender.domain.NavigationLinkBuilder
@@ -14,12 +15,14 @@ import com.mapsender.domain.NominatimGeocoder
 import com.mapsender.domain.OutgoingPlace
 import com.mapsender.domain.PlacePageParser
 import com.mapsender.domain.ShortLinkResolver
+import com.mapsender.domain.WebViewUrlResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.lang.ref.WeakReference
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -28,6 +31,8 @@ sealed interface ShareUiState {
     data object Parsing : ShareUiState
     /** Resolviendo un enlace corto por red (requiere Internet, unos segundos). */
     data class Resolving(val url: String) : ShareUiState
+    /** Abriendo el lugar en un WebView oculto para obtener la URL final con coords. */
+    data class OpeningPlace(val url: String, val name: String) : ShareUiState
     /** Buscando coordenadas del nombre vía Nominatim (último recurso). */
     data class Geocoding(val name: String) : ShareUiState
     data class Ready(val place: OutgoingPlace) : ShareUiState
@@ -51,6 +56,12 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
 
     private var rawText: String? = null
     private var resolver: ShortLinkResolver? = null
+    private var activityRef: WeakReference<Activity>? = null
+
+    /** La pantalla registra la Activity para el WebView oculto (referencia débil). */
+    fun attachActivity(activity: Activity?) {
+        activityRef = activity?.let { WeakReference(it) }
+    }
 
     fun handleSharedText(text: String?) {
         rawText = text
@@ -99,11 +110,25 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             is ShortLinkResolver.ResolveResult.Page -> {
                                 // HTTP 200 sin redirección: página del lugar.
-                                // Las coordenadas del HTML no son fiables; extrae el nombre,
-                                // geocodifícalo y si falla envía búsqueda Waze (q).
+                                // 1) WebView oculto (como el navegador): URL final con coords.
+                                // 2) Nombre → Nominatim. 3) Búsqueda Waze.
                                 val name = PlacePageParser.extractPlaceName(resolved.html)
-                                if (name != null) emitNamed(name, text, settings)
-                                else _state.value = ShareUiState.Unrecognized(
+                                if (name != null) {
+                                    val webUrl = openInWebView(r.url, name)
+                                    if (webUrl != null) {
+                                        when (val r3 = MapsLinkParser.parse(webUrl)) {
+                                            is MapsLinkParser.ParseResult.Success -> {
+                                                emitReady(r3.destination.copy(
+                                                    name = r3.destination.name ?: name,
+                                                    originalText = text
+                                                ))
+                                                return@launch
+                                            }
+                                            else -> { /* sin coords: sigue a Nominatim */ }
+                                        }
+                                    }
+                                    emitNamed(name, text, settings)
+                                } else _state.value = ShareUiState.Unrecognized(
                                     "La página del enlace no contiene coordenadas ni nombre reconocible.",
                                     r.url
                                 )
@@ -127,16 +152,33 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Abre la URL en un WebView oculto y espera la URL final con coordenadas.
+     * Null si timeout, sin WebView o sin coordenadas.
+     */
+    private suspend fun openInWebView(shortUrl: String, name: String): String? {
+        val ctx = activityRef?.get() ?: mapSenderApp.applicationContext
+        _state.value = ShareUiState.OpeningPlace(shortUrl, name)
+        return try {
+            WebViewUrlResolver.resolveFinalUrl(ctx, shortUrl)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private suspend fun emitReady(destination: GeoDestination) {
         val settings = repo.settings.first()
         val navUrl = NavigationLinkBuilder.buildPreferred(destination, settings.navApp, settings.wazeNavigate)
         _state.value = ShareUiState.Ready(OutgoingPlace.Located(destination, navUrl))
+        // Envío automático (por defecto): sin confirmación va directo al estéreo.
+        if (!settings.confirmBeforeSend) send()
     }
 
     private suspend fun emitSearch(name: String, originalText: String?) {
         val settings = repo.settings.first()
         val navUrl = NavigationLinkBuilder.buildSearchPreferred(name, settings.navApp)
         _state.value = ShareUiState.Ready(OutgoingPlace.Search(name, navUrl, originalText))
+        if (!settings.confirmBeforeSend) send()
     }
 
     /**

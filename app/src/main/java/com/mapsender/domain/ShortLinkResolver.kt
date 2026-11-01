@@ -30,10 +30,10 @@ class ShortLinkResolver(
     }
 
     companion object {
-        // UA de Chrome móvil: con el UA de OkHttp Google devuelve la página
-        // intermedia (HTTP 200); con UA móvil puede devolver el 302 clásico.
-        private const val MOBILE_UA =
-            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+        // UA de Chrome móvil (compartido con WebViewUrlResolver): con el UA de
+        // OkHttp Google devuelve la página intermedia (HTTP 200); con UA móvil
+        // puede devolver el 302 clásico con la URL larga.
+        private const val MOBILE_UA = WebViewUrlResolver.MOBILE_UA
     }
 
     private val client: OkHttpClient by lazy {

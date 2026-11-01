@@ -32,7 +32,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val priority = MutableStateFlow("5")
     val navApp = MutableStateFlow(NavAppPreference.WAZE)
     val wazeNavigate = MutableStateFlow(true)
-    val confirmBeforeSend = MutableStateFlow(true)
+    val confirmBeforeSend = MutableStateFlow(false)
     val timeout = MutableStateFlow("15")
     val retry = MutableStateFlow(true)
 

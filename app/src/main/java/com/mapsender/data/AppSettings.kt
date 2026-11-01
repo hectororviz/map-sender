@@ -10,7 +10,8 @@ data class AppSettings(
     val priority: Int = 5,
     val navApp: NavAppPreference = NavAppPreference.WAZE,
     val wazeNavigate: Boolean = true,
-    val confirmBeforeSend: Boolean = true,
+    /** false = envío automático al resolver (por defecto); true = pedir Enviar. */
+    val confirmBeforeSend: Boolean = false,
     val timeoutSeconds: Int = 15,
     val retryOnFailure: Boolean = true,
     val lastSentSummary: String = "",

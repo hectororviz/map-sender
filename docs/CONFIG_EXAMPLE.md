@@ -9,7 +9,7 @@ Nombre dispositivo:   movil-ejemplo
 Prioridad:            5
 App navegación:       WAZE
 Añadir navigate=yes:  sí
-Confirmar envío:      sí
+Confirmar envío:      no (automático; pon sí para revisar antes)
 Timeout (s):          15
 Reintentar:           sí
 ```

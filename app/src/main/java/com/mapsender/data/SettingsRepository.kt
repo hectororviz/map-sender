@@ -38,7 +38,7 @@ class SettingsRepository(private val context: Context) {
             navApp = runCatching { NavAppPreference.valueOf(p[Keys.NAV_APP] ?: "WAZE") }
                 .getOrDefault(NavAppPreference.WAZE),
             wazeNavigate = p[Keys.WAZE_NAVIGATE] ?: true,
-            confirmBeforeSend = p[Keys.CONFIRM] ?: true,
+            confirmBeforeSend = p[Keys.CONFIRM] ?: false,
             timeoutSeconds = p[Keys.TIMEOUT] ?: 15,
             retryOnFailure = p[Keys.RETRY] ?: true,
             lastSentSummary = p[Keys.LAST_SENT].orEmpty(),

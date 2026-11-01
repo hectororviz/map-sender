@@ -40,7 +40,10 @@ class ShortLinkResolver(
     }
 
     sealed interface ResolveResult {
-        data class Resolved(val finalUrl: String) : ResolveResult
+        /** Redirección seguida hasta una URL final (normalmente con coordenadas). */
+        data class Redirect(val finalUrl: String) : ResolveResult
+        /** HTTP 200 sin redirección: página del lugar (p. ej. maps.app.goo.gl). */
+        data class Page(val html: String) : ResolveResult
         data class Failed(val reason: String) : ResolveResult
     }
 
@@ -64,11 +67,24 @@ class ShortLinkResolver(
                         else java.net.URL(java.net.URL(current), location).toString()
                         return@repeat
                     }
-                    if (resp.isSuccessful) return@withContext ResolveResult.Resolved(current)
+                    if (resp.isSuccessful) {
+                        val body = resp.body
+                        // Evita cargar binarios enormes; la página del lugar pesa ~200 KB.
+                        if (body != null && body.contentLength() > 2_000_000) {
+                            return@withContext ResolveResult.Redirect(current)
+                        }
+                        val html = try {
+                            body?.string().orEmpty()
+                        } catch (e: Exception) {
+                            return@withContext ResolveResult.Failed("respuesta ilegible (${e.message})")
+                        }
+                        if (html.isBlank()) return@withContext ResolveResult.Redirect(current)
+                        return@withContext ResolveResult.Page(html.take(1_000_000))
+                    }
                     return@withContext ResolveResult.Failed("HTTP ${resp.code}")
                 }
             }
-            ResolveResult.Resolved(current)
+            ResolveResult.Failed("demasiadas redirecciones")
         } catch (e: Exception) {
             ResolveResult.Failed(describe(e, current))
         }

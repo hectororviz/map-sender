@@ -33,6 +33,18 @@ class NavigationLinkBuilderTest {
 
     @Test fun preferred_wazeDefault() {
         val d = GeoDestination(40.0, -3.0)
-        assertTrue(NavigationLinkBuilder.buildPreferred(d, NavAppPreference.WAZE).startsWith("https://waze.com/ul"))
+        assertTrue(NavigationLinkBuilder.buildPreferred(d, NavAppPreference.WAZE).startsWith("https://waze.com/ul?ll="))
+    }
+
+    @Test fun wazeSearch_encodesQuery() {
+        val url = NavigationLinkBuilder.wazeSearch("Coco Cases, Valparaíso 1509")
+        assertTrue(url.startsWith("https://waze.com/ul?q="))
+        assertFalse(url.contains(" "))
+    }
+
+    @Test fun searchPreferred_respectsNavApp() {
+        assertTrue(NavigationLinkBuilder.buildSearchPreferred("Plaza Mayor", NavAppPreference.WAZE).startsWith("https://waze.com/ul?q="))
+        assertTrue(NavigationLinkBuilder.buildSearchPreferred("Plaza Mayor", NavAppPreference.GOOGLE_MAPS).contains("query="))
+        assertTrue(NavigationLinkBuilder.buildSearchPreferred("Plaza Mayor", NavAppPreference.GEO).startsWith("geo:"))
     }
 }

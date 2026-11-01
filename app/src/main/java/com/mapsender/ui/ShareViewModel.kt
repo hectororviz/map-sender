@@ -9,6 +9,8 @@ import com.mapsender.domain.GeoDestination
 import com.mapsender.domain.GotifyPayloadBuilder
 import com.mapsender.domain.MapsLinkParser
 import com.mapsender.domain.NavigationLinkBuilder
+import com.mapsender.domain.OutgoingPlace
+import com.mapsender.domain.PlacePageParser
 import com.mapsender.domain.ShortLinkResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +26,7 @@ sealed interface ShareUiState {
     data object Parsing : ShareUiState
     /** Resolviendo un enlace corto por red (requiere Internet, unos segundos). */
     data class Resolving(val url: String) : ShareUiState
-    data class Ready(val destination: GeoDestination, val navigationUrl: String) : ShareUiState
+    data class Ready(val place: OutgoingPlace) : ShareUiState
     data class NeedsResolution(val url: String) : ShareUiState
     /** Entrada manual de coordenadas (alternativa si falla el análisis automático). */
     data class ManualEntry(val error: String? = null) : ShareUiState
@@ -73,16 +75,34 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                             ShortLinkResolver.ResolveResult.Failed(e.message ?: "error inesperado")
                         }
                         when (resolved) {
-                            is ShortLinkResolver.ResolveResult.Resolved -> {
+                            is ShortLinkResolver.ResolveResult.Redirect -> {
+                                // URL final con coordenadas → flujo normal.
                                 when (val r2 = MapsLinkParser.parse(resolved.finalUrl)) {
                                     is MapsLinkParser.ParseResult.Success -> emitReady(
                                         r2.destination.copy(originalText = text)
                                     )
-                                    else -> _state.value = ShareUiState.Unrecognized(
-                                        "El enlace corto se resolvió pero no contiene coordenadas.",
-                                        r.url
-                                    )
+                                    else -> {
+                                        // URL final sin coords (p. ej. /maps/place/Nombre):
+                                        // intenta nombre para búsqueda.
+                                        val name = PlacePageParser.extractFromUrl(resolved.finalUrl)
+                                        if (name != null) emitSearch(name, text)
+                                        else _state.value = ShareUiState.Unrecognized(
+                                            "El enlace se resolvió pero no contiene coordenadas ni nombre.",
+                                            r.url
+                                        )
+                                    }
                                 }
+                            }
+                            is ShortLinkResolver.ResolveResult.Page -> {
+                                // HTTP 200 sin redirección: página del lugar.
+                                // Las coordenadas del HTML no son fiables; extrae el nombre
+                                // y envía búsqueda Waze (q) para elegir en el receptor.
+                                val name = PlacePageParser.extractPlaceName(resolved.html)
+                                if (name != null) emitSearch(name, text)
+                                else _state.value = ShareUiState.Unrecognized(
+                                    "La página del enlace no contiene coordenadas ni nombre reconocible.",
+                                    r.url
+                                )
                             }
                             is ShortLinkResolver.ResolveResult.Failed ->
                                 _state.value = ShareUiState.Error(
@@ -106,7 +126,13 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun emitReady(destination: GeoDestination) {
         val settings = repo.settings.first()
         val navUrl = NavigationLinkBuilder.buildPreferred(destination, settings.navApp, settings.wazeNavigate)
-        _state.value = ShareUiState.Ready(destination, navUrl)
+        _state.value = ShareUiState.Ready(OutgoingPlace.Located(destination, navUrl))
+    }
+
+    private suspend fun emitSearch(name: String, originalText: String?) {
+        val settings = repo.settings.first()
+        val navUrl = NavigationLinkBuilder.buildSearchPreferred(name, settings.navApp)
+        _state.value = ShareUiState.Ready(OutgoingPlace.Search(name, navUrl, originalText))
     }
 
     fun send() {
@@ -119,15 +145,14 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             val payload = GotifyPayloadBuilder.build(
-                current.destination, settings.deviceName.ifBlank { "móvil" },
-                settings.priority, current.navigationUrl
+                current.place, settings.deviceName.ifBlank { "móvil" }, settings.priority
             )
             val result = client.sendMessage(
                 settings.gotifyBaseUrl, settings.gotifyToken, payload, settings.timeoutSeconds
             )
             when (result) {
                 is GotifyResult.Success -> {
-                    val summary = "${current.destination.shortLabel()} · " +
+                    val summary = "${current.place.displayTitle} · " +
                         LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
                     repo.saveLastSent(summary)
                     _state.value = ShareUiState.Sent(summary)
@@ -163,8 +188,5 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = ShareUiState.ManualEntry("Error inesperado: ${e.message ?: "?"}")
             }
         }
-    }
-    fun backToReady(destination: GeoDestination, navigationUrl: String) {
-        _state.value = ShareUiState.Ready(destination, navigationUrl)
     }
 }

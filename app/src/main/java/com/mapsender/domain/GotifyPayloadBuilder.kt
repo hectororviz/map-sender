@@ -33,21 +33,46 @@ object GotifyPayloadBuilder {
         deviceName: String,
         priority: Int,
         navigationUrl: String
-    ): Payload {
-        require(destination.isValid()) { "Destino con coordenadas inválidas" }
-        val place = destination.name?.takeIf { it.isNotBlank() } ?: "Destino recibido"
+    ): Payload = build(
+        OutgoingPlace.Located(destination, navigationUrl), deviceName, priority
+    )
+
+    fun build(place: OutgoingPlace, deviceName: String, priority: Int): Payload {
         val device = deviceName.trim().takeIf { it.isNotEmpty() } ?: "móvil"
-        val title = "$place (de $device)".take(180)
-        val lines = mutableListOf(place, "${destination.latitude},${destination.longitude}")
-        destination.address?.takeIf { it.isNotBlank() }?.let { lines.add(it) }
-        destination.originalText?.takeIf { it.isNotBlank() && it.length < 500 }?.let {
-            if (!lines.contains(it)) lines.add("Origen: $it")
+        val prio = priority.coerceIn(0, 10)
+        return when (place) {
+            is OutgoingPlace.Located -> {
+                val destination = place.destination
+                require(destination.isValid()) { "Destino con coordenadas inválidas" }
+                val label = destination.name?.takeIf { it.isNotBlank() } ?: "Destino recibido"
+                val lines = mutableListOf(label, "${destination.latitude},${destination.longitude}")
+                destination.address?.takeIf { it.isNotBlank() }?.let { lines.add(it) }
+                destination.originalText?.takeIf { it.isNotBlank() && it.length < 500 }?.let {
+                    if (!lines.contains(it)) lines.add("Origen: $it")
+                }
+                Payload(
+                    title = "$label (de $device)".take(180),
+                    message = lines.joinToString("\n"),
+                    priority = prio,
+                    clickUrl = place.navigationUrl
+                )
+            }
+            is OutgoingPlace.Search -> {
+                val label = place.query.takeIf { it.isNotBlank() } ?: "Destino recibido"
+                val lines = mutableListOf(
+                    label,
+                    "Búsqueda: al tocar se abre Waze para elegir el destino."
+                )
+                place.originalText?.takeIf { it.isNotBlank() && it.length < 500 }?.let {
+                    if (!lines.contains(it)) lines.add("Origen: $it")
+                }
+                Payload(
+                    title = "$label (de $device)".take(180),
+                    message = lines.joinToString("\n"),
+                    priority = prio,
+                    clickUrl = place.navigationUrl
+                )
+            }
         }
-        return Payload(
-            title = title,
-            message = lines.joinToString("\n"),
-            priority = priority.coerceIn(0, 10),
-            clickUrl = navigationUrl
-        )
     }
 }

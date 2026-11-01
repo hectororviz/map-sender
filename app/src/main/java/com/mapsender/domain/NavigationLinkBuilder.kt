@@ -1,5 +1,6 @@
 package com.mapsender.domain
 
+import java.net.URLEncoder
 import java.util.Locale
 
 /**
@@ -29,6 +30,28 @@ object NavigationLinkBuilder {
     fun geoIntent(latitude: Double, longitude: Double, label: String? = null): String {
         val ll = formatLl(latitude, longitude)
         return if (label.isNullOrBlank()) "geo:$ll" else "geo:$ll?q=$ll(${label.trim()})"
+    }
+
+    /**
+     * Búsqueda por nombre (sin coordenadas). Oficial:
+     * https://developers.google.com/waze/deeplinks (`q`).
+     * Se usa `q` SIN `navigate=yes` a propósito: navegar al primer resultado
+     * sin confirmación podría guiar al destino equivocado; el receptor elige.
+     */
+    fun wazeSearch(query: String): String =
+        "https://waze.com/ul?q=${URLEncoder.encode(query.trim(), "UTF-8")}"
+
+    fun googleMapsSearch(query: String): String =
+        "https://www.google.com/maps/search/?api=1&query=${URLEncoder.encode(query.trim(), "UTF-8")}"
+
+    fun geoSearch(query: String): String =
+        "geo:0,0?q=${URLEncoder.encode(query.trim(), "UTF-8")}"
+
+    fun buildSearchPreferred(query: String, preference: NavAppPreference): String = when (preference) {
+        NavAppPreference.WAZE -> wazeSearch(query)
+        NavAppPreference.GOOGLE_MAPS -> googleMapsSearch(query)
+        NavAppPreference.GEO -> geoSearch(query)
+        NavAppPreference.BROWSER -> googleMapsSearch(query)
     }
 
     fun buildPreferred(

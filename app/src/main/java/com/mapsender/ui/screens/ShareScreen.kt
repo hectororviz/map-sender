@@ -46,10 +46,9 @@ fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, on
             is ShareUiState.Ready -> {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(s.destination.shortLabel(), style = MaterialTheme.typography.titleMedium)
-                        Text("${s.destination.latitude}, ${s.destination.longitude}")
-                        s.destination.address?.let { Text(it) }
-                        Text("Abrirá: ${s.navigationUrl}", style = MaterialTheme.typography.bodySmall)
+                        Text(s.place.displayTitle, style = MaterialTheme.typography.titleMedium)
+                        Text(s.place.displaySubtitle)
+                        Text("Abrirá: ${s.place.navigationUrl}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {

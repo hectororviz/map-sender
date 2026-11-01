@@ -28,4 +28,21 @@ class GotifyPayloadBuilderTest {
     fun invalidDestination_rejected() {
         GotifyPayloadBuilder.build(GeoDestination(999.0, 0.0), "m", 5, "https://x")
     }
+
+    @Test fun searchPayload_hasClickUrl() {
+        val place = OutgoingPlace.Search("Coco Cases, Grand Bourg", "https://waze.com/ul?q=Coco", "origen")
+        val p = GotifyPayloadBuilder.build(place, "movil-x", 5)
+        val json = p.toJsonObject()
+        val click = (((json["extras"] as kotlinx.serialization.json.JsonObject)
+            ["client::notification"] as kotlinx.serialization.json.JsonObject)
+            ["click"] as kotlinx.serialization.json.JsonObject
+        assertEquals("https://waze.com/ul?q=Coco", (click["url"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertTrue((json["title"] as kotlinx.serialization.json.JsonPrimitive).content.contains("Coco Cases"))
+    }
+
+    @Test fun outgoingPlace_locatedDisplay() {
+        val place = OutgoingPlace.Located(GeoDestination(40.41, -3.70, name = "Plaza"), "https://waze.com/ul?ll=1,1")
+        assertEquals("Plaza", place.displayTitle)
+        assertTrue(place.displaySubtitle.contains("40.41"))
+    }
 }

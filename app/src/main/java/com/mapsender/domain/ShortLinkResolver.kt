@@ -2,8 +2,10 @@ package com.mapsender.domain
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.net.Inet4Address
 import java.util.concurrent.TimeUnit
 
 /**
@@ -14,8 +16,19 @@ class ShortLinkResolver(
     private val timeoutSeconds: Int = 15
 ) {
     // Sin followRedirects: leemos Location nosotros para limitar saltos.
+    // DNS con preferencia IPv4: muchas redes móviles tienen IPv6 roto (agujero negro)
+    // y OkHttp 4 marca en serie, quemando el timeout por intento, mientras el
+    // navegador (happy eyeballs) cae a IPv4 al instante. Solo afecta a la
+    // resolución de enlaces cortos; el cliente Gotify no se toca.
+    private val ipv4FirstDns = Dns { hostname ->
+        val all = Dns.SYSTEM.lookup(hostname)
+        val v4 = all.filter { it is Inet4Address }
+        if (v4.isNotEmpty()) v4 else all
+    }
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .dns(ipv4FirstDns)
             .followRedirects(false)
             .followSslRedirects(false)
             .connectTimeout(timeoutSeconds.coerceIn(3, 120).toLong(), TimeUnit.SECONDS)

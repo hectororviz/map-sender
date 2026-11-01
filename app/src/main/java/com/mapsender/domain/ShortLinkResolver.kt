@@ -6,6 +6,7 @@ import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
 /**
@@ -20,10 +21,12 @@ class ShortLinkResolver(
     // y OkHttp 4 marca en serie, quemando el timeout por intento, mientras el
     // navegador (happy eyeballs) cae a IPv4 al instante. Solo afecta a la
     // resolución de enlaces cortos; el cliente Gotify no se toca.
-    private val ipv4FirstDns = Dns { hostname ->
-        val all = Dns.SYSTEM.lookup(hostname)
-        val v4 = all.filter { it is Inet4Address }
-        if (v4.isNotEmpty()) v4 else all
+    private val ipv4FirstDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val all = Dns.SYSTEM.lookup(hostname)
+            val v4 = all.filter { it is Inet4Address }
+            return if (v4.isNotEmpty()) v4 else all
+        }
     }
 
     private val client: OkHttpClient by lazy {

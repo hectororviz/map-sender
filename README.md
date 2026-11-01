@@ -122,7 +122,8 @@ Workflow activo: `.github/workflows/android.yml` (push/PR a `main` y manual).
 
 - Job `test`: `./gradlew testDebugUnitTest`.
 - Job `build-debug`: `./gradlew assembleDebug` y sube el APK como artefacto `app-debug`.
-- El APK se descarga en GitHub → Actions → run → Artifacts.
+- Job `release` (solo push a `main`): publica el APK en **Releases → `latest`** (rolling: cada compilación en verde sustituye el APK anterior).
+- Descarga directa: GitHub → Releases → `Última compilación (latest)` → `app-debug.apk`.
 - Sin firma release (pendiente, cuando se pida).
 
 ## Licencia

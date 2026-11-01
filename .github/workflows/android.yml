@@ -51,3 +51,26 @@ jobs:
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
+
+  release:
+    name: Publish rolling release (latest)
+    needs: build-debug
+    # Solo en push a main (no en PRs de forks, que no tienen permiso de escritura).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-debug
+          path: apk
+      - name: Publish to latest release
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          automatic_release_tag: latest
+          prerelease: false
+          title: "Última compilación (latest)"
+          files: apk/*.apk

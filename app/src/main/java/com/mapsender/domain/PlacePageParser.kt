@@ -45,8 +45,11 @@ object PlacePageParser {
         val m = CID_PAIR.find(html) ?: return null
         var i = m.range.last + 1
         val n = html.length
-        // Secuencia esperada: ["CID"\,"Nombre"...] con escapes \" literales.
+        // Secuencia real: ["CID"\,\"Nombre"...] con escapes \" literales:
+        // cierre del CID ("), coma, apertura del nombre (").
         if (i < n && html[i] == '\\') i++
+        if (i >= n || html[i] != '"') return null
+        i++
         if (i >= n || html[i] != ',') return null
         i++
         if (i < n && html[i] == '\\') i++

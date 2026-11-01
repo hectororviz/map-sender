@@ -1,5 +1,7 @@
 package com.mapsender.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mapsender.ui.ShareUiState
 import com.mapsender.ui.ShareViewModel
@@ -27,6 +30,12 @@ import com.mapsender.ui.ShareViewModel
 @Composable
 fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, onOpenSettings: () -> Unit) {
     val state by vm.state.collectAsState()
+    val context = LocalContext.current
+    fun openInBrowser(url: String) {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
     LaunchedEffect(sharedText) { vm.handleSharedText(sharedText) }
 
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -60,6 +69,7 @@ fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, on
                     Text("Enlace corto sin coordenadas: ${s.url}")
                     Text("No se pudo resolver automáticamente. Abre el enlace con Internet y comparte el lugar con coordenadas.")
                     Button(onClick = { vm.retryParse() }) { Text("Reintentar") }
+                    OutlinedButton(onClick = { openInBrowser(s.url) }) { Text("Abrir en navegador") }
                     OutlinedButton(onClick = { vm.openManualEntry() }) { Text("Introducir manualmente") }
                     OutlinedButton(onClick = onClose) { Text("Cancelar") }
                 }
@@ -79,6 +89,9 @@ fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, on
                 Text(s.message)
                 if (s.canRetry) {
                     Button(onClick = { vm.retryParse() }) { Text("Reintentar") }
+                }
+                s.linkUrl?.let { url ->
+                    OutlinedButton(onClick = { openInBrowser(url) }) { Text("Abrir en navegador") }
                 }
                 OutlinedButton(onClick = { vm.openManualEntry() }) { Text("Introducir manualmente") }
                 OutlinedButton(onClick = onOpenSettings) { Text("Abrir ajustes") }

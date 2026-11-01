@@ -31,7 +31,7 @@ sealed interface ShareUiState {
     data class Unrecognized(val reason: String, val raw: String?) : ShareUiState
     data object Sending : ShareUiState
     data class Sent(val summary: String) : ShareUiState
-    data class Error(val message: String, val canRetry: Boolean = true) : ShareUiState
+    data class Error(val message: String, val canRetry: Boolean = true, val linkUrl: String? = null) : ShareUiState
 }
 
 /** Flujo Sharesheet: parsea texto compartido, resuelve cortos y envía a Gotify. */
@@ -62,7 +62,10 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                     is MapsLinkParser.ParseResult.NeedsResolution -> {
                         // Estado visible: la resolución por red puede tardar (cobertura escasa).
                         _state.value = ShareUiState.Resolving(r.url)
-                        val timeoutMs = (settings.timeoutSeconds.coerceIn(3, 120) * 2L + 10L) * 1000L
+                        // Resolución con tiempos cortos: fallar rápido con motivo claro.
+                        val resolveTimeout = minOf(settings.timeoutSeconds, 10).coerceIn(3, 120)
+                        resolver = ShortLinkResolver(resolveTimeout)
+                        val timeoutMs = (resolveTimeout * 2L + 10L) * 1000L
                         val resolved = try {
                             withTimeoutOrNull(timeoutMs) { resolver!!.resolve(r.url) }
                                 ?: ShortLinkResolver.ResolveResult.Failed("tiempo de espera agotado")
@@ -83,8 +86,10 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             is ShortLinkResolver.ResolveResult.Failed ->
                                 _state.value = ShareUiState.Error(
-                                    "No se pudo resolver el enlace corto (${resolved.reason}). " +
-                                        "Abre el enlace con Internet o comparte el lugar con coordenadas."
+                                    "No se pudo resolver el enlace corto: ${resolved.reason}. " +
+                                        "Comprueba que este enlace abre en el navegador del móvil; " +
+                                        "si tampoco abre, es la red (datos, DNS privado o VPN).",
+                                    linkUrl = r.url
                                 )
                         }
                     }

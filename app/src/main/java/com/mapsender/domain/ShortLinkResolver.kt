@@ -28,7 +28,7 @@ class ShortLinkResolver(
         data class Failed(val reason: String) : ResolveResult
     }
 
-    suspend fun resolve(shortUrl: String, maxHops: Int = 5): ResolveResult = withContext(Dispatchers.IO) {
+    suspend fun resolve(shortUrl: String, maxHops: Int = 3): ResolveResult = withContext(Dispatchers.IO) {
         var current = shortUrl
         try {
             repeat(maxHops) {
@@ -39,7 +39,7 @@ class ShortLinkResolver(
                 val response = try {
                     client.newCall(request).execute()
                 } catch (e: Exception) {
-                    return@withContext ResolveResult.Failed(e.message ?: "Error de red")
+                    return@withContext ResolveResult.Failed(describe(e, current))
                 }
                 response.use { resp ->
                     val location = resp.header("Location")
@@ -54,7 +54,18 @@ class ShortLinkResolver(
             }
             ResolveResult.Resolved(current)
         } catch (e: Exception) {
-            ResolveResult.Failed(e.message ?: "Error de red")
+            ResolveResult.Failed(describe(e, current))
+        }
+    }
+
+    /** Motivo legible para mostrar al usuario (sin datos sensibles). */
+    private fun describe(e: Exception, url: String): String {
+        val host = runCatching { java.net.URL(url).host }.getOrDefault("el servidor")
+        return when (e) {
+            is java.net.UnknownHostException -> "sin respuesta DNS de $host (¿sin Internet, DNS privado o VPN?)"
+            is java.net.SocketTimeoutException -> "sin respuesta de $host (conexión colgada)"
+            is java.io.IOException -> "error de red con $host (${e.message})"
+            else -> e.message ?: "error desconocido"
         }
     }
 }

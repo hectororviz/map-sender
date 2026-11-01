@@ -32,12 +32,14 @@ class ShortLinkResolver(
         var current = shortUrl
         try {
             repeat(maxHops) {
-                val request = Request.Builder().url(current).head().build()
+                // Solo GET: algunos frontales responden mal o lento a HEAD.
+                // followRedirects=false: leemos Location nosotros para limitar saltos.
+                val request = Request.Builder().url(current).get()
+                    .header("Accept-Encoding", "identity").build()
                 val response = try {
                     client.newCall(request).execute()
-                } catch (_: Exception) {
-                    // Algunos acortadores rechazan HEAD; reintenta con GET.
-                    client.newCall(Request.Builder().url(current).get().build()).execute()
+                } catch (e: Exception) {
+                    return@withContext ResolveResult.Failed(e.message ?: "Error de red")
                 }
                 response.use { resp ->
                     val location = resp.header("Location")

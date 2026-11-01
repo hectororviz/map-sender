@@ -26,6 +26,8 @@ sealed interface ShareUiState {
     data class Resolving(val url: String) : ShareUiState
     data class Ready(val destination: GeoDestination, val navigationUrl: String) : ShareUiState
     data class NeedsResolution(val url: String) : ShareUiState
+    /** Entrada manual de coordenadas (alternativa si falla el análisis automático). */
+    data class ManualEntry(val error: String? = null) : ShareUiState
     data class Unrecognized(val reason: String, val raw: String?) : ShareUiState
     data object Sending : ShareUiState
     data class Sent(val summary: String) : ShareUiState
@@ -131,6 +133,32 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun retryParse() = handleSharedText(rawText)
+
+    fun openManualEntry() {
+        _state.value = ShareUiState.ManualEntry()
+    }
+
+    /** Acepta "40.41536" o "40,41536" (coma decimal española) en cada campo. */
+    fun submitManual(latText: String, lngText: String, name: String) {
+        val lat = latText.trim().replace(',', '.').toDoubleOrNull()
+        val lng = lngText.trim().replace(',', '.').toDoubleOrNull()
+        if (lat == null || lng == null || lat !in -90.0..90.0 || lng !in -180.0..180.0) {
+            _state.value = ShareUiState.ManualEntry("Coordenadas inválidas. Ejemplo: 40.41536 y -3.70734")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val dest = GeoDestination(
+                    lat, lng,
+                    name = name.trim().takeIf { it.isNotEmpty() },
+                    originalText = rawText
+                )
+                emitReady(dest)
+            } catch (e: Exception) {
+                _state.value = ShareUiState.ManualEntry("Error inesperado: ${e.message ?: "?"}")
+            }
+        }
+    }
     fun backToReady(destination: GeoDestination, navigationUrl: String) {
         _state.value = ShareUiState.Ready(destination, navigationUrl)
     }

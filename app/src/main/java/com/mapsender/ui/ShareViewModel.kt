@@ -15,12 +15,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 sealed interface ShareUiState {
     data object Idle : ShareUiState
     data object Parsing : ShareUiState
+    /** Resolviendo un enlace corto por red (requiere Internet, unos segundos). */
+    data class Resolving(val url: String) : ShareUiState
     data class Ready(val destination: GeoDestination, val navigationUrl: String) : ShareUiState
     data class NeedsResolution(val url: String) : ShareUiState
     data class Unrecognized(val reason: String, val raw: String?) : ShareUiState
@@ -48,31 +51,47 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         viewModelScope.launch {
-            _state.value = ShareUiState.Parsing
-            val settings = repo.settings.first()
-            resolver = ShortLinkResolver(settings.timeoutSeconds)
-            when (val r = MapsLinkParser.parse(text)) {
-                is MapsLinkParser.ParseResult.Success -> emitReady(r.destination)
-                is MapsLinkParser.ParseResult.NeedsResolution -> {
-                    // Intento automático de resolución (configurable por timeout).
-                    when (val resolved = resolver!!.resolve(r.url)) {
-                        is ShortLinkResolver.ResolveResult.Resolved -> {
-                            when (val r2 = MapsLinkParser.parse(resolved.finalUrl)) {
-                                is MapsLinkParser.ParseResult.Success -> emitReady(
-                                    r2.destination.copy(originalText = text)
-                                )
-                                else -> _state.value = ShareUiState.NeedsResolution(r.url)
-                            }
+            try {
+                _state.value = ShareUiState.Parsing
+                val settings = repo.settings.first()
+                resolver = ShortLinkResolver(settings.timeoutSeconds)
+                when (val r = MapsLinkParser.parse(text)) {
+                    is MapsLinkParser.ParseResult.Success -> emitReady(r.destination)
+                    is MapsLinkParser.ParseResult.NeedsResolution -> {
+                        // Estado visible: la resolución por red puede tardar (cobertura escasa).
+                        _state.value = ShareUiState.Resolving(r.url)
+                        val timeoutMs = (settings.timeoutSeconds.coerceIn(3, 120) * 2L + 10L) * 1000L
+                        val resolved = try {
+                            withTimeoutOrNull(timeoutMs) { resolver!!.resolve(r.url) }
+                                ?: ShortLinkResolver.ResolveResult.Failed("tiempo de espera agotado")
+                        } catch (e: Exception) {
+                            ShortLinkResolver.ResolveResult.Failed(e.message ?: "error inesperado")
                         }
-                        is ShortLinkResolver.ResolveResult.Failed ->
-                            _state.value = ShareUiState.Error(
-                                "No se pudo resolver el enlace corto (${resolved.reason}). " +
-                                    "Abre el enlace con Internet o comparte el lugar con coordenadas."
-                            )
+                        when (resolved) {
+                            is ShortLinkResolver.ResolveResult.Resolved -> {
+                                when (val r2 = MapsLinkParser.parse(resolved.finalUrl)) {
+                                    is MapsLinkParser.ParseResult.Success -> emitReady(
+                                        r2.destination.copy(originalText = text)
+                                    )
+                                    else -> _state.value = ShareUiState.Unrecognized(
+                                        "El enlace corto se resolvió pero no contiene coordenadas.",
+                                        r.url
+                                    )
+                                }
+                            }
+                            is ShortLinkResolver.ResolveResult.Failed ->
+                                _state.value = ShareUiState.Error(
+                                    "No se pudo resolver el enlace corto (${resolved.reason}). " +
+                                        "Abre el enlace con Internet o comparte el lugar con coordenadas."
+                                )
+                        }
                     }
+                    is MapsLinkParser.ParseResult.Unrecognized ->
+                        _state.value = ShareUiState.Unrecognized(r.reason, r.url)
                 }
-                is MapsLinkParser.ParseResult.Unrecognized ->
-                    _state.value = ShareUiState.Unrecognized(r.reason, r.url)
+            } catch (e: Exception) {
+                // Red de seguridad: nunca dejar la UI bloqueada en "Analizando…".
+                _state.value = ShareUiState.Error("Error inesperado: ${e.message ?: e.javaClass.simpleName}")
             }
         }
     }

@@ -44,6 +44,13 @@ fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, on
                     OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f)) { Text("Cancelar") }
                 }
             }
+            is ShareUiState.Resolving ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Resolviendo enlace corto…")
+                    Text(s.url, style = MaterialTheme.typography.bodySmall)
+                    Text("Esto necesita Internet y puede tardar unos segundos con poca cobertura.")
+                    OutlinedButton(onClick = onClose) { Text("Cancelar") }
+                }
             is ShareUiState.NeedsResolution ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Enlace corto sin coordenadas: ${s.url}")

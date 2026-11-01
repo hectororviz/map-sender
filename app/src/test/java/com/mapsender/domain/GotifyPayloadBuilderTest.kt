@@ -35,7 +35,7 @@ class GotifyPayloadBuilderTest {
         val json = p.toJsonObject()
         val click = (((json["extras"] as kotlinx.serialization.json.JsonObject)
             ["client::notification"] as kotlinx.serialization.json.JsonObject)
-            ["click"] as kotlinx.serialization.json.JsonObject
+            ["click"] as kotlinx.serialization.json.JsonObject)
         assertEquals("https://waze.com/ul?q=Coco", (click["url"] as kotlinx.serialization.json.JsonPrimitive).content)
         assertTrue((json["title"] as kotlinx.serialization.json.JsonPrimitive).content.contains("Coco Cases"))
     }

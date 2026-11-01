@@ -101,7 +101,7 @@ object MapsLinkParser {
         var nameFromQuery: String? = null
         for (key in candidateKeys) {
             val raw = params[key] ?: continue
-            val decoded = decode(raw)
+            val decoded = decode(raw) ?: continue
             extractCoords(decoded)?.let { (lat, lng) ->
                 val name = nameFromPlaceSegment(url) ?: guessName(decoded, fullText)
                 return GeoDestination(lat, lng, name = name, originalText = fullText)
@@ -121,12 +121,14 @@ object MapsLinkParser {
             }
         }
 
-        extractCoords(decode(url))?.let { (lat, lng) ->
-            return GeoDestination(
-                lat, lng,
-                name = nameFromPlaceSegment(url) ?: nameFromQuery,
-                originalText = fullText
-            )
+        decode(url)?.let { decodedUrl ->
+            extractCoords(decodedUrl)?.let { (lat, lng) ->
+                return GeoDestination(
+                    lat, lng,
+                    name = nameFromPlaceSegment(url) ?: nameFromQuery,
+                    originalText = fullText
+                )
+            }
         }
 
         // Nombre sin coordenadas (p. ej. ?q=Plaza+Mayor): sin lat/lng no hay destino válido.
@@ -135,7 +137,7 @@ object MapsLinkParser {
 
     internal fun nameFromPlaceSegment(url: String): String? {
         val raw = PLACE_PATTERN.find(url)?.groupValues?.getOrNull(1) ?: return null
-        val cleaned = decode(raw).replace('+', ' ').trim()
+        val cleaned = (decode(raw) ?: return null).replace('+', ' ').trim()
         if (cleaned.isBlank() || COORD_PATTERN.containsMatchIn(cleaned)) return null
         return cleaned
     }

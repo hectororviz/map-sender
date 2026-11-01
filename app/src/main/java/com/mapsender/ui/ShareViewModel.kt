@@ -31,8 +31,9 @@ sealed interface ShareUiState {
 
 /** Flujo Sharesheet: parsea texto compartido, resuelve cortos y envía a Gotify. */
 class ShareViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = (app as MapSenderApp).settingsRepository
-    private val client = app.gotifyClient
+    private val mapSenderApp = app as MapSenderApp
+    private val repo = mapSenderApp.settingsRepository
+    private val client = mapSenderApp.gotifyClient
 
     private val _state = MutableStateFlow<ShareUiState>(ShareUiState.Idle)
     val state: StateFlow<ShareUiState> = _state.asStateFlow()

@@ -18,8 +18,9 @@ import kotlinx.coroutines.launch
 
 /** Pantalla de ajustes: edita y guarda DataStore + prueba conexión. */
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = (app as MapSenderApp).settingsRepository
-    private val client = app.gotifyClient
+    private val mapSenderApp = app as MapSenderApp
+    private val repo = mapSenderApp.settingsRepository
+    private val client = mapSenderApp.gotifyClient
 
     val saved: StateFlow<AppSettings> = repo.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())

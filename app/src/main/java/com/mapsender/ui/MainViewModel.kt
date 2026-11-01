@@ -17,8 +17,9 @@ data class ConnectionUiState(val testing: Boolean = false, val message: String? 
 
 /** Pantalla principal: estado de conexión + último envío. */
 class MainViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = (app as MapSenderApp).settingsRepository
-    private val client = app.gotifyClient
+    private val mapSenderApp = app as MapSenderApp
+    private val repo = mapSenderApp.settingsRepository
+    private val client = mapSenderApp.gotifyClient
 
     val settings: StateFlow<AppSettings> = repo.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())

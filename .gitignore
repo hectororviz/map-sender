@@ -11,7 +11,9 @@
 .cxx
 local.properties
 *.hprof
-*.keystore
+# Keystore de DEPURACIÓN fijo: se versiona a propósito para que todos los
+# APK de CI compartan firma. No poner aquí keystores de release.
+!app/debug.keystore
 *.jks
 google-services.json
 # Keystore / signing

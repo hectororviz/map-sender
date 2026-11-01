@@ -113,6 +113,3 @@ private fun ManualEntryForm(error: String?, onAccept: (String, String, String) -
         OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Cancelar") }
     }
 }
-        }
-    }
-}

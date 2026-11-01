@@ -1,0 +1,22 @@
+# ---> This .gitignore is for an Android/Kotlin project, no secrets included.
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.hprof
+*.keystore
+*.jks
+google-services.json
+# Keystore / signing
+keystore.properties
+# Test / coverage
+*.exec
+# OS
+Thumbs.db

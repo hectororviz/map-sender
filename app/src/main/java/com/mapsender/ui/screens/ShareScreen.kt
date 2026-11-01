@@ -96,6 +96,12 @@ fun ShareScreen(vm: ShareViewModel, sharedText: String?, onClose: () -> Unit, on
                 OutlinedButton(onClick = onOpenSettings) { Text("Abrir ajustes") }
                 OutlinedButton(onClick = onClose) { Text("Cerrar") }
             }
+            is ShareUiState.Geocoding ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Buscando coordenadas de «${s.name}»…")
+                    Text("Último recurso: geocodificación del nombre.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = onClose) { Text("Cancelar") }
+                }
             is ShareUiState.ManualEntry -> ManualEntryForm(
                 error = s.error,
                 onAccept = { lat, lng, name -> vm.submitManual(lat, lng, name) },

@@ -20,6 +20,8 @@ object MapsLinkParser {
 
     private val COORD_PATTERN = Regex("""(-?\d{1,3}\.\d+)\s*[,;]\s*(-?\d{1,3}\.\d+)""")
     private val AT_PATTERN = Regex("""@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)""")
+    /** Pin exacto en parámetros data/pb de Google Maps: !3dLAT!4dLNG (máxima prioridad). */
+    private val DATA_LATLNG = Regex("""!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)""")
     private val PLACE_PATTERN = Regex("""/place/([^/@?]+)""")
     private val URL_PATTERN = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
 
@@ -94,6 +96,21 @@ object MapsLinkParser {
 
     internal fun parseMapsUrl(url: String, fullText: String): GeoDestination? {
         val uri = try { URI(url) } catch (_: Exception) { return null }
+        val decodedUrl = decode(url) ?: url
+
+        // 0. Pin exacto !3dLAT!4dLNG (máxima prioridad sobre q/ll y @).
+        DATA_LATLNG.find(decodedUrl)?.let {
+            val lat = it.groupValues[1].toDoubleOrNull()
+            val lng = it.groupValues[2].toDoubleOrNull()
+            if (lat != null && lng != null && lat in -90.0..90.0 && lng in -180.0..180.0) {
+                return GeoDestination(
+                    lat, lng,
+                    name = nameFromPlaceSegment(url),
+                    originalText = fullText
+                )
+            }
+        }
+
         val params = parseQueryParams(uri.rawQuery.orEmpty() + "&" + uri.fragment.orEmpty())
 
         // Orden: query/q/daddr/destination/ll/sll, luego @lat,lng, luego coords sueltas.

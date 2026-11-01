@@ -29,6 +29,13 @@ class ShortLinkResolver(
         }
     }
 
+    companion object {
+        // UA de Chrome móvil: con el UA de OkHttp Google devuelve la página
+        // intermedia (HTTP 200); con UA móvil puede devolver el 302 clásico.
+        private const val MOBILE_UA =
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    }
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .dns(ipv4FirstDns)
@@ -54,7 +61,8 @@ class ShortLinkResolver(
                 // Solo GET: algunos frontales responden mal o lento a HEAD.
                 // followRedirects=false: leemos Location nosotros para limitar saltos.
                 val request = Request.Builder().url(current).get()
-                    .header("Accept-Encoding", "identity").build()
+                    .header("Accept-Encoding", "identity")
+                    .header("User-Agent", MOBILE_UA).build()
                 val response = try {
                     client.newCall(request).execute()
                 } catch (e: Exception) {

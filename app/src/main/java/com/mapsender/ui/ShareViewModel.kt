@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.mapsender.MapSenderApp
 import com.mapsender.data.GotifyResult
 import com.mapsender.domain.GeoDestination
+import com.mapsender.data.AppSettings
 import com.mapsender.domain.GotifyPayloadBuilder
 import com.mapsender.domain.MapsLinkParser
 import com.mapsender.domain.NavigationLinkBuilder
+import com.mapsender.domain.NominatimGeocoder
 import com.mapsender.domain.OutgoingPlace
 import com.mapsender.domain.PlacePageParser
 import com.mapsender.domain.ShortLinkResolver
@@ -26,6 +28,8 @@ sealed interface ShareUiState {
     data object Parsing : ShareUiState
     /** Resolviendo un enlace corto por red (requiere Internet, unos segundos). */
     data class Resolving(val url: String) : ShareUiState
+    /** Buscando coordenadas del nombre vía Nominatim (último recurso). */
+    data class Geocoding(val name: String) : ShareUiState
     data class Ready(val place: OutgoingPlace) : ShareUiState
     data class NeedsResolution(val url: String) : ShareUiState
     /** Entrada manual de coordenadas (alternativa si falla el análisis automático). */
@@ -83,9 +87,9 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                                     )
                                     else -> {
                                         // URL final sin coords (p. ej. /maps/place/Nombre):
-                                        // intenta nombre para búsqueda.
+                                        // nombre → geocodificar → búsqueda.
                                         val name = PlacePageParser.extractFromUrl(resolved.finalUrl)
-                                        if (name != null) emitSearch(name, text)
+                                        if (name != null) emitNamed(name, text, settings)
                                         else _state.value = ShareUiState.Unrecognized(
                                             "El enlace se resolvió pero no contiene coordenadas ni nombre.",
                                             r.url
@@ -95,10 +99,10 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             is ShortLinkResolver.ResolveResult.Page -> {
                                 // HTTP 200 sin redirección: página del lugar.
-                                // Las coordenadas del HTML no son fiables; extrae el nombre
-                                // y envía búsqueda Waze (q) para elegir en el receptor.
+                                // Las coordenadas del HTML no son fiables; extrae el nombre,
+                                // geocodifícalo y si falla envía búsqueda Waze (q).
                                 val name = PlacePageParser.extractPlaceName(resolved.html)
-                                if (name != null) emitSearch(name, text)
+                                if (name != null) emitNamed(name, text, settings)
                                 else _state.value = ShareUiState.Unrecognized(
                                     "La página del enlace no contiene coordenadas ni nombre reconocible.",
                                     r.url
@@ -133,6 +137,27 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
         val settings = repo.settings.first()
         val navUrl = NavigationLinkBuilder.buildSearchPreferred(name, settings.navApp)
         _state.value = ShareUiState.Ready(OutgoingPlace.Search(name, navUrl, originalText))
+    }
+
+    /**
+     * Nombre sin coordenadas: intenta geocodificar (Nominatim) y si falla,
+     * cae a búsqueda Waze para elegir en el receptor.
+     */
+    private suspend fun emitNamed(name: String, originalText: String?, settings: AppSettings) {
+        _state.value = ShareUiState.Geocoding(name)
+        val geoTimeout = minOf(settings.timeoutSeconds, 10).coerceIn(3, 120)
+        val geo = try {
+            withTimeoutOrNull(geoTimeout * 1000L + 5000L) {
+                NominatimGeocoder(geoTimeout).geocode(name)
+            }
+        } catch (_: Exception) {
+            null
+        }
+        if (geo != null) {
+            emitReady(GeoDestination(geo.lat, geo.lng, name = name, originalText = originalText))
+        } else {
+            emitSearch(name, originalText)
+        }
     }
 
     fun send() {

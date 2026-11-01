@@ -35,6 +35,14 @@ class MapsLinkParserTest {
         assertTrue(r.destination.isValid())
     }
 
+    @Test fun dataLatLng_pinExactFirst() {
+        val text = "Mira https://www.google.com/maps/place/Casa/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d-34.603722!4d-58.381592!16m1!1e1"
+        val r = MapsLinkParser.parse(text) as MapsLinkParser.ParseResult.Success
+        assertEquals(-34.603722, r.destination.latitude, 1e-6)
+        assertEquals(-58.381592, r.destination.longitude, 1e-6)
+        assertEquals("Casa", r.destination.name)
+    }
+
     @Test fun shortLink_needsResolution() {
         val r = MapsLinkParser.parse("https://maps.app.goo.gl/AbC123XyZ")
         assertTrue(r is MapsLinkParser.ParseResult.NeedsResolution)

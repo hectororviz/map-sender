@@ -60,6 +60,9 @@ object PlacePageParser {
             val c = html[i]
             if (c == '\\' && i + 1 < n) {
                 val next = html[i + 1]
+                // \" seguido de , ] } es el cierre del string (todo " va escapado
+                // en este formato, incluidos los delimitadores), no contenido.
+                if (next == '"' && (i + 2 >= n || html[i + 2] == ',' || html[i + 2] == ']' || html[i + 2] == '}')) break
                 if (next == 'u' && i + 5 < n) {
                     val hex = html.substring(i + 2, i + 6)
                     val code = hex.toIntOrNull(16)
@@ -69,7 +72,7 @@ object PlacePageParser {
                         continue
                     }
                 }
-                // \" \\ \/ etc: conserva el carácter escapado.
+                // \" \\ \/ etc. dentro del contenido: conserva el carácter escapado.
                 sb.append(next)
                 i += 2
                 continue

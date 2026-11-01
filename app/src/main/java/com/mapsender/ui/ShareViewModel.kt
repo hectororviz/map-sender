@@ -5,23 +5,17 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mapsender.MapSenderApp
-import com.mapsender.data.AppSettings
 import com.mapsender.data.GotifyResult
 import com.mapsender.domain.GeoDestination
 import com.mapsender.domain.GotifyPayloadBuilder
-import com.mapsender.domain.MapsLinkParser
 import com.mapsender.domain.NavigationLinkBuilder
-import com.mapsender.domain.NominatimGeocoder
 import com.mapsender.domain.OutgoingPlace
-import com.mapsender.domain.PlacePageParser
-import com.mapsender.domain.ShortLinkResolver
-import com.mapsender.domain.WebViewUrlResolver
+import com.mapsender.domain.ResolvePlaceUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -55,7 +49,6 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<ShareUiState> = _state.asStateFlow()
 
     private var rawText: String? = null
-    private var resolver: ShortLinkResolver? = null
     private var activityRef: WeakReference<Activity>? = null
 
     /** La pantalla registra la Activity para el WebView oculto (referencia débil). */
@@ -71,98 +64,31 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             try {
-                _state.value = ShareUiState.Parsing
-                val settings = repo.settings.first()
-                resolver = ShortLinkResolver(settings.timeoutSeconds)
-                when (val r = MapsLinkParser.parse(text)) {
-                    is MapsLinkParser.ParseResult.Success -> emitReady(r.destination)
-                    is MapsLinkParser.ParseResult.NeedsResolution -> {
-                        // Estado visible: la resolución por red puede tardar (cobertura escasa).
-                        _state.value = ShareUiState.Resolving(r.url)
-                        // Resolución con tiempos cortos: fallar rápido con motivo claro.
-                        val resolveTimeout = minOf(settings.timeoutSeconds, 10).coerceIn(3, 120)
-                        resolver = ShortLinkResolver(resolveTimeout)
-                        val timeoutMs = (resolveTimeout * 2L + 10L) * 1000L
-                        val resolved = try {
-                            withTimeoutOrNull(timeoutMs) { resolver!!.resolve(r.url) }
-                                ?: ShortLinkResolver.ResolveResult.Failed("tiempo de espera agotado")
-                        } catch (e: Exception) {
-                            ShortLinkResolver.ResolveResult.Failed(e.message ?: "error inesperado")
-                        }
-                        when (resolved) {
-                            is ShortLinkResolver.ResolveResult.Redirect -> {
-                                // URL final con coordenadas → flujo normal.
-                                when (val r2 = MapsLinkParser.parse(resolved.finalUrl)) {
-                                    is MapsLinkParser.ParseResult.Success -> emitReady(
-                                        r2.destination.copy(originalText = text)
-                                    )
-                                    else -> {
-                                        // URL final sin coords (p. ej. /maps/place/Nombre):
-                                        // nombre → geocodificar → búsqueda.
-                                        val name = PlacePageParser.extractFromUrl(resolved.finalUrl)
-                                        if (name != null) emitNamed(name, text, settings)
-                                        else _state.value = ShareUiState.Unrecognized(
-                                            "El enlace se resolvió pero no contiene coordenadas ni nombre.",
-                                            r.url
-                                        )
-                                    }
-                                }
-                            }
-                            is ShortLinkResolver.ResolveResult.Page -> {
-                                // HTTP 200 sin redirección: página del lugar.
-                                // 1) WebView oculto (como el navegador): URL final con coords.
-                                // 2) Nombre → Nominatim. 3) Búsqueda Waze.
-                                val name = PlacePageParser.extractPlaceName(resolved.html)
-                                if (name != null) {
-                                    val webUrl = openInWebView(r.url, name)
-                                    if (webUrl != null) {
-                                        when (val r3 = MapsLinkParser.parse(webUrl)) {
-                                            is MapsLinkParser.ParseResult.Success -> {
-                                                emitReady(r3.destination.copy(
-                                                    name = r3.destination.name ?: name,
-                                                    originalText = text
-                                                ))
-                                                return@launch
-                                            }
-                                            else -> { /* sin coords: sigue a Nominatim */ }
-                                        }
-                                    }
-                                    emitNamed(name, text, settings)
-                                } else _state.value = ShareUiState.Unrecognized(
-                                    "La página del enlace no contiene coordenadas ni nombre reconocible.",
-                                    r.url
-                                )
-                            }
-                            is ShortLinkResolver.ResolveResult.Failed ->
-                                _state.value = ShareUiState.Error(
-                                    "No se pudo resolver el enlace corto: ${resolved.reason}. " +
-                                        "Comprueba que este enlace abre en el navegador del móvil; " +
-                                        "si tampoco abre, es la red (datos, DNS privado o VPN).",
-                                    linkUrl = r.url
-                                )
+                val useCase = ResolvePlaceUseCase()
+                val webCtx = activityRef?.get() ?: mapSenderApp.applicationContext
+                when (val outcome = useCase.resolve(text, webCtx) { event ->
+                    if (event is ResolvePlaceUseCase.Event.StageChanged) {
+                        _state.value = when (val s = event.stage) {
+                            ResolvePlaceUseCase.Stage.Parsing -> ShareUiState.Parsing
+                            is ResolvePlaceUseCase.Stage.Resolving -> ShareUiState.Resolving(s.url)
+                            is ResolvePlaceUseCase.Stage.OpeningPlace -> ShareUiState.OpeningPlace(s.url, s.name)
+                            is ResolvePlaceUseCase.Stage.Geocoding -> ShareUiState.Geocoding(s.name)
                         }
                     }
-                    is MapsLinkParser.ParseResult.Unrecognized ->
-                        _state.value = ShareUiState.Unrecognized(r.reason, r.url)
+                    // Los TraceStep solo los consume la pantalla de prueba.
+                }) {
+                    is ResolvePlaceUseCase.Outcome.Located ->
+                        emitReady(outcome.destination.copy(originalText = text))
+                    is ResolvePlaceUseCase.Outcome.Named -> emitSearch(outcome.name, text)
+                    is ResolvePlaceUseCase.Outcome.Unrecognized ->
+                        _state.value = ShareUiState.Unrecognized(outcome.reason, outcome.raw)
+                    is ResolvePlaceUseCase.Outcome.Failed ->
+                        _state.value = ShareUiState.Error(outcome.message, linkUrl = outcome.linkUrl)
                 }
             } catch (e: Exception) {
                 // Red de seguridad: nunca dejar la UI bloqueada en "Analizando…".
                 _state.value = ShareUiState.Error("Error inesperado: ${e.message ?: e.javaClass.simpleName}")
             }
-        }
-    }
-
-    /**
-     * Abre la URL en un WebView oculto y espera la URL final con coordenadas.
-     * Null si timeout, sin WebView o sin coordenadas.
-     */
-    private suspend fun openInWebView(shortUrl: String, name: String): String? {
-        val ctx = activityRef?.get() ?: mapSenderApp.applicationContext
-        _state.value = ShareUiState.OpeningPlace(shortUrl, name)
-        return try {
-            WebViewUrlResolver.resolveFinalUrl(ctx, shortUrl)
-        } catch (_: Exception) {
-            null
         }
     }
 
@@ -179,27 +105,6 @@ class ShareViewModel(app: Application) : AndroidViewModel(app) {
         val navUrl = NavigationLinkBuilder.buildSearchPreferred(name, settings.navApp)
         _state.value = ShareUiState.Ready(OutgoingPlace.Search(name, navUrl, originalText))
         if (!settings.confirmBeforeSend) send()
-    }
-
-    /**
-     * Nombre sin coordenadas: intenta geocodificar (Nominatim) y si falla,
-     * cae a búsqueda Waze para elegir en el receptor.
-     */
-    private suspend fun emitNamed(name: String, originalText: String?, settings: AppSettings) {
-        _state.value = ShareUiState.Geocoding(name)
-        val geoTimeout = minOf(settings.timeoutSeconds, 10).coerceIn(3, 120)
-        val geo = try {
-            withTimeoutOrNull(geoTimeout * 1000L + 5000L) {
-                NominatimGeocoder(geoTimeout).geocode(name)
-            }
-        } catch (_: Exception) {
-            null
-        }
-        if (geo != null) {
-            emitReady(GeoDestination(geo.lat, geo.lng, name = name, originalText = originalText))
-        } else {
-            emitSearch(name, originalText)
-        }
     }
 
     fun send() {

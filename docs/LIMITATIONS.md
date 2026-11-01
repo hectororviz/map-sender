@@ -3,12 +3,10 @@
 1. **Enlaces cortos** (`maps.app.goo.gl/…`, `goo.gl/maps/…`): Google ya no redirige
    (devuelve HTTP 200 con la página del lugar, sin coordenadas en el HTML).
    Cadena de resolución: UA móvil (puede devolver el 302 clásico) → pin `!3d/!4d`
-   → `q/ll` → `/@` → nombre del lugar → **geocodificación Nominatim**
-   (https://nominatim.openstreetmap.org, sin key, último recurso automático).
-   Si todo falla, se envía **búsqueda Waze** (`https://waze.com/ul?q=…`, oficial):
-   al tocar, Waze muestra resultados y el receptor elige. Sin `navigate=yes`
-   a propósito (evita navegar al resultado erróneo). Alternativa manual siempre
-   disponible. Nunca se usan coordenadas del HTML (`center=`) porque no son fiables.
+   → `q/ll` → `/@` → WebView oculto 25 s (como el navegador; requiere System WebView)
+   → **geocodificación Nominatim** (nombre completo y, si no hay resultados,
+   reintento sin el nombre del local) → **búsqueda Waze** (`q=`).
+   Pantalla "Probar resolución" (en Ajustes) ejecuta la cadena en dry-run con traza.
 2. **Nombre sin coordenadas** (`?q=Plaza+Mayor` sin lat/lng): no es enviable como Waze;
    se informa como "no reconocido". Workaround documentado: en Maps, usar las coordenadas
    o el pin exacto antes de compartir.

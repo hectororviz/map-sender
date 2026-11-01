@@ -28,7 +28,7 @@ import com.mapsender.domain.NavAppPreference
 import com.mapsender.ui.SettingsViewModel
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, onDone: () -> Unit) {
+fun SettingsScreen(vm: SettingsViewModel, onDone: () -> Unit, onOpenTest: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadOnce() }
     val errors by vm.errors.collectAsState()
     val status by vm.status.collectAsState()
@@ -66,6 +66,9 @@ fun SettingsScreen(vm: SettingsViewModel, onDone: () -> Unit) {
         Button(onClick = { vm.save(onDone) }, modifier = Modifier.fillMaxWidth()) { Text("Guardar") }
         OutlinedButton(onClick = { vm.testAndSave() }, enabled = !testing, modifier = Modifier.fillMaxWidth()) {
             Text(if (testing) "Probando…" else "Probar conexión")
+        }
+        OutlinedButton(onClick = onOpenTest, modifier = Modifier.fillMaxWidth()) {
+            Text("Probar resolución (sin enviar)")
         }
         OutlinedButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Volver") }
     }

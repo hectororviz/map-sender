@@ -33,9 +33,20 @@ class NominatimGeocoder(private val timeoutSeconds: Int = 8) {
             .build()
     }
 
-    suspend fun geocode(query: String): Result? = withContext(Dispatchers.IO) {
+    suspend fun geocode(query: String): Result? =
+        (geocodeOutcome(query) as? GeocodeOutcome.Found)?.result
+
+    sealed interface GeocodeOutcome {
+        data class Found(val result: Result) : GeocodeOutcome
+        /** Petición OK pero sin resultados (reintentable con consulta simplificada). */
+        data object NotFound : GeocodeOutcome
+        /** Error de red/HTTP/timeout (reintentar no ayuda a corto plazo). */
+        data object Failed : GeocodeOutcome
+    }
+
+    suspend fun geocodeOutcome(query: String): GeocodeOutcome = withContext(Dispatchers.IO) {
         val q = query.trim().take(200)
-        if (q.length < 3) return@withContext null
+        if (q.length < 3) return@withContext GeocodeOutcome.Failed
         val url = okhttp3.HttpUrl.Builder()
             .scheme("https")
             .host("nominatim.openstreetmap.org")
@@ -54,13 +65,14 @@ class NominatimGeocoder(private val timeoutSeconds: Int = 8) {
                 .get()
                 .build()
             client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
+                if (!resp.isSuccessful) return@withContext GeocodeOutcome.Failed
                 val body = resp.body?.string().orEmpty()
-                if (body.isBlank()) return@withContext null
-                return@withContext parseFirst(body)
+                if (body.isBlank()) return@withContext GeocodeOutcome.Failed
+                val parsed = parseFirst(body) ?: return@withContext GeocodeOutcome.NotFound
+                return@withContext GeocodeOutcome.Found(parsed)
             }
         } catch (_: Exception) {
-            null
+            GeocodeOutcome.Failed
         }
     }
 
